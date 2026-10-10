@@ -1,0 +1,36 @@
+[package]
+name = "calendar-gpui"
+version = "0.1.0"
+edition = "2024"
+description = "A desktop calendar built with Rust and GPUI"
+license = "MIT"
+publish = false
+
+[features]
+default = ["desktop"]
+desktop = ["dep:gpui", "dep:unicode-segmentation"]
+
+[dependencies]
+gpui = { version = "0.2.2", optional = true }
+chrono = { version = "0.4.45", features = ["serde"] }
+chrono-tz = { version = "0.10", features = ["serde"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+url = "2"
+unicode-segmentation = { version = "1", optional = true }
+
+[[bin]]
+name = "calendar-gpui"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "warn"
+
+[profile.release]
+lto = "thin"
+strip = "debuginfo"
