@@ -45,6 +45,11 @@ impl CalendarApp {
         command: Command,
         cx: &mut Context<Self>,
     ) -> Stateful<Div> {
+        let hover_background = if matches!(command, Command::Save) {
+            0x8963c8
+        } else {
+            0x32273f
+        };
         div()
             .id(SharedString::from(id.to_owned()))
             .tab_index(0)
@@ -57,7 +62,7 @@ impl CalendarApp {
             .text_color(rgb(TEXT))
             .text_size(px(12.0))
             .cursor_pointer()
-            .hover(|style| style.bg(rgb(0x32273f)))
+            .hover(move |style| style.bg(rgb(hover_background)))
             .focus(|style| style.border_color(rgb(ACCENT)).bg(rgb(0x30263e)))
             .child(label.into())
             .on_click(cx.listener(move |this, _, window, cx| this.execute(command, window, cx)))
@@ -65,73 +70,145 @@ impl CalendarApp {
 
     pub(super) fn editor_panel(&self, cx: &mut Context<Self>) -> AnyElement {
         let editor = self.editor.as_ref().expect("editor panel needs editor");
-        if self.delete_pending {
-            return div()
+        let field = |index: usize, label: &str| {
+            div()
                 .flex()
                 .flex_col()
-                .gap_4()
-                .p_8()
-                .max_w(px(650.0))
-                .child(div().text_size(px(20.0)).child("Delete this item?"))
-                .child(editor.fields[0].read(cx).value())
-                .child("This permanently removes the saved item.")
+                .flex_1()
+                .min_w(px(0.0))
+                .gap_1()
                 .child(
                     div()
-                        .flex()
-                        .gap_3()
-                        .child(self.button("keep", "Keep item", Command::CancelDelete, cx))
-                        .child(self.button(
-                            "confirm-delete",
-                            "Delete permanently",
-                            Command::ConfirmDelete,
-                            cx,
-                        )),
+                        .text_size(px(12.0))
+                        .text_color(rgb(MUTED))
+                        .child(label.to_owned()),
                 )
-                .into_any_element();
-        }
-        let labels = [
-            "Title",
-            "Description",
-            "Start · YYYY-MM-DD HH:MM",
-            "End · YYYY-MM-DD HH:MM",
-            "Item time zone · IANA",
-            "Link · HTTP / HTTPS",
-        ];
-        let mut fields = div().flex().flex_col().gap_3();
-        for (field, label) in editor.fields.iter().zip(labels) {
-            fields = fields.child(
+                .child(editor.fields[index].clone())
+        };
+        let fields = div()
+            .flex()
+            .flex_col()
+            .gap_3()
+            .child(field(0, "Title"))
+            .child(
                 div()
                     .flex()
+                    .gap_3()
+                    .child(field(2, "Start"))
+                    .child(field(3, "End")),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(rgb(MUTED))
+                    .child("Date & time · YYYY-MM-DD HH:MM"),
+            )
+            .child(field(1, "Notes"))
+            .child(field(4, "Meeting or link"));
+        div()
+            .id("editor-scroll")
+            .flex_1()
+            .min_h_0()
+            .overflow_y_scroll()
+            .p_6()
+            .child(
+                div()
+                    .max_w(px(620.0))
+                    .w_full()
+                    .mx_auto()
+                    .rounded_xl()
+                    .border_1()
+                    .border_color(rgb(0x40334f))
+                    .bg(rgb(0x18151f))
+                    .overflow_hidden()
+                    .flex()
                     .flex_col()
-                    .gap_1()
                     .child(
                         div()
-                            .text_size(px(12.0))
-                            .text_color(rgb(MUTED))
-                            .child(label),
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap_3()
+                            .p_6()
+                            .bg(rgb(0x272033))
+                            .border_b_1()
+                            .border_color(rgb(0x40334f))
+                            .child(
+                                div()
+                                    .flex()
+                                    .flex_col()
+                                    .gap_2()
+                                    .child(
+                                        div()
+                                            .text_size(px(11.0))
+                                            .text_color(rgb(ACCENT))
+                                            .child("● YOUR CALENDAR"),
+                                    )
+                                    .child(div().text_size(px(26.0)).child(
+                                        if editor.id.is_some() {
+                                            "Edit event"
+                                        } else {
+                                            "Make time for it"
+                                        },
+                                    ))
+                                    .child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child(
+                                        if editor.id.is_some() {
+                                            "Fine-tune the details of your day."
+                                        } else {
+                                            "A new moment in your day."
+                                        },
+                                    )),
+                            ),
                     )
-                    .child(field.clone()),
-            );
-        }
-        div().id("editor-scroll").flex_1().overflow_y_scroll().p_6()
-            .child(div().max_w(px(760.0)).mx_auto().flex().flex_col().gap_4()
-                .child(div().text_size(px(20.0)).child(if editor.id.is_some() { "Edit item" } else { "New item" }))
-                .child(div().flex().gap_3()
-                    .child(self.button("event-kind", if editor.kind == ItemKind::Event { "● Event" } else { "Event" }, Command::Kind(ItemKind::Event), cx))
-                    .child(self.button("task-kind", if editor.kind == ItemKind::Task { "● Task" } else { "Task" }, Command::Kind(ItemKind::Task), cx)))
-                .child(fields)
-                .child(div().flex().gap_2()
-                    .child(self.button("start-fold", format!("Start: {}", occurrence_label(editor.start_occurrence)), Command::StartOccurrence, cx))
-                    .child(self.button("end-fold", format!("End: {}", occurrence_label(editor.end_occurrence)), Command::EndOccurrence, cx)))
-                .child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child("For a repeated clock time, choose its earlier or later occurrence. Missing times cannot be saved."))
-                .when(editor.kind == ItemKind::Task, |panel| panel.child(
-                    self.button("complete", if editor.completed { "☑ Completed" } else { "☐ Mark complete" }, Command::Complete, cx)))
-                .child(div().flex().gap_3()
-                    .child(self.button("save", "Save · Ctrl/Cmd+S", Command::Save, cx))
-                    .child(self.button("cancel", "Cancel · Esc", Command::Cancel, cx))
-                    .when(editor.id.is_some(), |row| row.child(self.button("delete", "Delete…", Command::Delete, cx))))
-                .when_some(editor.id.filter(|id| self.calendar.item(*id).is_ok_and(|item| !item.url().is_empty())),
-                    |panel, id| panel.child(self.button("open-editor-link", "Open saved link ↗", Command::OpenLink(id), cx))))
+                    .child(fields.p_6().gap_4())
+                    .child(
+                        div()
+                            .flex()
+                            .gap_3()
+                            .items_center()
+                            .justify_between()
+                            .px_6()
+                            .py_4()
+                            .border_t_1()
+                            .border_color(rgb(BORDER))
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_center()
+                                    .when(editor.id.is_some(), |row| {
+                                        row.child(
+                                            self.button("delete", "🗑︎ Delete", Command::Delete, cx)
+                                                .px_2()
+                                                .border_0()
+                                                .bg(rgba(0x00000000))
+                                                .text_color(rgb(MUTED)),
+                                        )
+                                    }),
+                            )
+                            .child(div().flex_1())
+                            .child(self.button("cancel", "Cancel · Esc", Command::Cancel, cx))
+                            .child(
+                                self.button("save", "Save event · Enter", Command::Save, cx)
+                                    .bg(rgb(0x7955b8))
+                                    .border_color(rgb(0x9470cf)),
+                            ),
+                    )
+                    .when_some(
+                        editor.id.filter(|id| {
+                            self.calendar
+                                .item(*id)
+                                .is_ok_and(|item| !item.url().is_empty())
+                        }),
+                        |panel, id| {
+                            panel.child(div().px_6().pb_4().child(self.button(
+                                "open-editor-link",
+                                "Open saved link ↗",
+                                Command::OpenLink(id),
+                                cx,
+                            )))
+                        },
+                    ),
+            )
             .into_any_element()
     }
 
@@ -140,17 +217,45 @@ impl CalendarApp {
             .settings
             .as_ref()
             .expect("settings panel needs settings");
-        div().p_8().max_w(px(760.0)).flex().flex_col().gap_4()
+        div()
+            .p_8()
+            .max_w(px(760.0))
+            .flex()
+            .flex_col()
+            .gap_4()
             .child(div().text_size(px(20.0)).child("Calendar settings"))
-            .child("Display time zone (IANA)")
-            .child(settings.zone.clone())
-            .child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child("Changing this zone changes the display, not the saved instants. Each item retains its original zone."))
-            .child(self.button("holidays", if settings.holidays { "☑ French national public holidays" } else { "☐ French national public holidays" }, Command::ToggleHolidays, cx))
-            .child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child("National France calendar only; regional and overseas holidays are excluded."))
-            .child(div().flex().gap_3()
-                .child(self.button("save-settings", "Apply", Command::SaveSettings, cx))
-                .child(self.button("cancel-settings", "Cancel", Command::Cancel, cx)))
-            .child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child(format!("Data: {}", self.store.as_ref().map(|store| store.path().display().to_string()).unwrap_or_default())))
+            .child(self.button(
+                "holidays",
+                if settings.holidays {
+                    "☑ French national public holidays"
+                } else {
+                    "☐ French national public holidays"
+                },
+                Command::ToggleHolidays,
+                cx,
+            ))
+            .child(div().text_size(px(12.0)).text_color(rgb(MUTED)).child(
+                "National France calendar only; regional and overseas holidays are excluded.",
+            ))
+            .child(
+                div()
+                    .flex()
+                    .gap_3()
+                    .child(self.button("save-settings", "Apply", Command::SaveSettings, cx))
+                    .child(self.button("cancel-settings", "Cancel", Command::Cancel, cx)),
+            )
+            .child(
+                div()
+                    .text_size(px(12.0))
+                    .text_color(rgb(MUTED))
+                    .child(format!(
+                        "Data: {}",
+                        self.store
+                            .as_ref()
+                            .map(|store| store.display().to_string())
+                            .unwrap_or_default()
+                    )),
+            )
             .into_any_element()
     }
 
@@ -170,11 +275,7 @@ impl CalendarApp {
         let zone = self.calendar.timezone();
         let start = item.start().with_timezone(&zone);
         let end = item.end().with_timezone(&zone);
-        let prefix = match (item.kind(), item.completed()) {
-            (ItemKind::Event, _) => "●",
-            (ItemKind::Task, false) => "☐",
-            (ItemKind::Task, true) => "☑",
-        };
+        let prefix = "●";
         let label = format!(
             "{prefix} {}{}",
             item.title(),
@@ -204,24 +305,27 @@ impl CalendarApp {
                 end.format("%H:%M").to_string()
             };
             format!("{from} – {until}")
+        } else if start.date_naive() == end.date_naive() {
+            format!(
+                "{} · {} – {}",
+                start.format("%d %b"),
+                start.format("%H:%M"),
+                end.format("%H:%M")
+            )
         } else {
             format!(
                 "{} → {}",
-                start.format("%d %b %H:%M %:z"),
-                end.format("%d %b %H:%M %:z")
+                start.format("%d %b %H:%M"),
+                end.format("%d %b %H:%M")
             )
         };
-        let color = if item.kind() == ItemKind::Task {
-            0x245f54
-        } else {
-            0x60439b
-        };
+        let color = 0x60439b;
         let item_id = item.id();
         let tooltip_title = format!("{prefix} {}", item.title());
         let tooltip_times = format!(
-            "{} → {} ({zone})",
-            start.format("%d %b %Y %H:%M %:z"),
-            end.format("%d %b %Y %H:%M %:z")
+            "{} → {}",
+            start.format("%d %b %Y %H:%M"),
+            end.format("%d %b %Y %H:%M")
         );
         let mut description = item.description().chars();
         let mut tooltip_description: String = description.by_ref().take(200).collect();
@@ -231,6 +335,8 @@ impl CalendarApp {
         div()
             .id(SharedString::from(id))
             .tab_index(0)
+            // Keep the hourly slot underneath from receiving this card's clicks.
+            .block_mouse_except_scroll()
             .w_full()
             .when(fill_height, |card| card.h_full())
             .p_2()
@@ -238,8 +344,8 @@ impl CalendarApp {
             .rounded_md()
             .bg(rgb(color))
             .border_1()
-            .border_color(rgb(if item.completed() { BORDER } else { 0x8064b5 }))
-            .text_color(rgb(if item.completed() { MUTED } else { TEXT }))
+            .border_color(rgb(0x8064b5))
+            .text_color(rgb(TEXT))
             .text_size(px(11.0))
             .overflow_hidden()
             .cursor_pointer()
@@ -253,18 +359,14 @@ impl CalendarApp {
                 })
                 .into()
             })
-            .child(div().when(compact, |line| line.truncate()).child(label))
-            .child(
-                div()
-                    .text_color(rgb(0xd7c8e9))
-                    .when(compact, |line| line.truncate())
-                    .child(time),
-            )
+            .child(div().truncate().child(label))
+            .child(div().text_color(rgb(0xd7c8e9)).truncate().child(time))
             .when(!compact && !item.url().is_empty(), |card| {
                 card.child("↗ Link attached")
             })
             .on_click(cx.listener(move |this, _, window, cx| {
-                this.execute(Command::Edit(item_id), window, cx)
+                cx.stop_propagation();
+                this.execute(Command::Edit(item_id), window, cx);
             }))
             .into_any_element()
     }
@@ -367,7 +469,7 @@ impl CalendarApp {
     }
 
     pub(super) fn sidebar(&self, cx: &mut Context<Self>) -> AnyElement {
-        let items = self.calendar.items_on(self.selected);
+        let items = upcoming_items(&self.calendar, Utc::now());
         let mut agenda = div().flex().flex_col().gap_3();
         for item in &items {
             agenda = agenda.child(self.item_card(
@@ -376,33 +478,15 @@ impl CalendarApp {
                 CardLayout::Agenda,
                 cx,
             ));
-            if !item.url().is_empty() {
-                agenda = agenda.child(self.button(
-                    &format!("link-{}", item.id()),
-                    "Open link ↗",
-                    Command::OpenLink(item.id()),
-                    cx,
-                ));
-            }
         }
         div()
-            .w(px(232.0))
+            .w(px(SIDEBAR_WIDTH))
+            .min_h_0()
             .flex_shrink_0()
             .p_4()
             .flex()
             .flex_col()
             .gap_4()
-            .child(
-                self.button(
-                    "new-selected",
-                    "+  Create",
-                    Command::Create(self.selected, 9),
-                    cx,
-                )
-                .py_3()
-                .bg(rgb(0x3b2d53))
-                .border_color(rgb(0x55416f)),
-            )
             .child(self.mini_month(cx))
             .child(
                 div()
@@ -415,36 +499,19 @@ impl CalendarApp {
             .child(
                 div()
                     .text_size(px(12.0))
-                    .child(self.selected.format("%A, %d %B").to_string()),
-            )
-            .child(
-                div()
-                    .text_size(px(11.0))
                     .text_color(rgb(MUTED))
-                    .child(self.calendar.timezone().name()),
+                    .child("Up next"),
             )
-            .child(div().text_size(px(12.0)).child(format!(
-                    "{} item(s) · {}",
-                    items.len(),
-                    Utc::now()
-                        .with_timezone(&self.calendar.timezone())
-                        .format("%H:%M %:z")
-                )))
             .child(
                 div()
                     .id("agenda-scroll")
                     .flex_1()
+                    .min_h_0()
                     .overflow_y_scroll()
                     .child(agenda)
                     .when(items.is_empty(), |panel| {
-                        panel.child(div().text_color(rgb(MUTED)).child("No events or tasks."))
+                        panel.child(div().text_color(rgb(MUTED)).child("No upcoming events."))
                     }),
-            )
-            .child(
-                div()
-                    .text_size(px(11.0))
-                    .text_color(rgb(MUTED))
-                    .child("Tab to navigate · Enter to open\nT Today · W Week · M Month"),
             )
             .into_any_element()
     }
@@ -491,7 +558,10 @@ impl CalendarApp {
     }
 
     pub(super) fn week_grid(&self, cx: &mut Context<Self>) -> AnyElement {
-        let days = visible_days(self.selected, CalendarView::Week);
+        let days: Vec<_> = visible_days(self.selected, CalendarView::Week)
+            .into_iter()
+            .filter(|date| self.show_weekends || !is_weekend(*date))
+            .collect();
         let items_by_day = self.calendar.items_on_days(&days);
         let now = Utc::now().with_timezone(&self.calendar.timezone());
         let mut heading = div().flex().w_full().child(
@@ -504,9 +574,9 @@ impl CalendarApp {
                 .pb_2()
                 .text_size(px(10.0))
                 .text_color(rgb(MUTED))
-                .child(now.format("UTC%:z").to_string()),
+                .child("Time"),
         );
-        let mut body = div().flex().w_full().h(px(1440.0));
+        let mut body = div().flex().flex_shrink_0().w_full().h(px(1440.0));
         let mut hours = div().w(px(64.0)).flex_shrink_0().relative();
         for hour in 0..24 {
             hours = hours.child(
@@ -594,6 +664,7 @@ impl CalendarApp {
         div()
             .id("week-horizontal")
             .flex_1()
+            .min_h_0()
             .overflow_x_scroll()
             .child(
                 div()
@@ -606,6 +677,7 @@ impl CalendarApp {
                         div()
                             .id("week-scroll")
                             .flex_1()
+                            .min_h_0()
                             .overflow_y_scroll()
                             .track_scroll(&self.week_scroll)
                             .child(body),
@@ -708,79 +780,162 @@ impl CalendarApp {
     }
 
     pub(super) fn toolbar(&self, cx: &mut Context<Self>) -> AnyElement {
-        let title = self.selected.format("%B %Y").to_string();
-        div()
+        let toolbar_button = |id: &str, label: &str, command, cx: &mut Context<Self>| {
+            self.button(id, label.to_owned(), command, cx)
+                .h(px(36.0))
+                .py_0()
+                .flex()
+                .items_center()
+                .justify_center()
+                .flex_shrink_0()
+        };
+        let views = div()
             .flex()
             .items_center()
-            .gap_2()
-            .px_4()
+            .flex_shrink_0()
+            .gap_1()
+            .rounded_lg()
+            .bg(rgb(0x18151f))
+            .children(
+                [
+                    (CalendarView::Week, "week", "Week"),
+                    (CalendarView::Month, "month", "Month"),
+                ]
+                .into_iter()
+                .map(|(view, id, label)| {
+                    toolbar_button(id, label, Command::View(view), cx)
+                        .w(px(72.0))
+                        .when(self.view == view, |button| {
+                            button.bg(rgb(0x3d3055)).border_color(rgb(0x675182))
+                        })
+                }),
+            );
+        div()
+            .flex()
+            .flex_shrink_0()
+            .items_center()
+            .pl_4()
+            .pr_3()
             .py_3()
             .child(
                 div()
-                    .text_size(px(20.0))
-                    .text_color(rgb(TEXT))
-                    .w(px(208.0))
+                    .w(px(SIDEBAR_WIDTH - 16.0))
                     .flex_shrink_0()
-                    .child("Calendar"),
+                    .text_size(px(20.0))
+                    .child(self.selected.format("%B %Y").to_string()),
             )
             .child(
-                self.button("today", "Today", Command::Today, cx)
-                    .rounded_full(),
+                div()
+                    .flex_1()
+                    .min_w_0()
+                    .flex()
+                    .items_center()
+                    .justify_between()
+                    .gap_3()
+                    .child(
+                        div()
+                            .flex()
+                            .flex_shrink_0()
+                            .gap_2()
+                            .items_center()
+                            .child(toolbar_button("today", "Today", Command::Today, cx).w(px(72.0)))
+                            .child(
+                                toolbar_button("previous", "‹", Command::Previous, cx)
+                                    .w(px(36.0))
+                                    .px_0()
+                                    .text_size(px(20.0)),
+                            )
+                            .child(
+                                toolbar_button("next", "›", Command::Next, cx)
+                                    .w(px(36.0))
+                                    .px_0()
+                                    .text_size(px(20.0)),
+                            ),
+                    )
+                    .child(views)
+                    .child(
+                        div()
+                            .flex_shrink_0()
+                            .flex()
+                            .justify_end()
+                            .items_center()
+                            .gap_2()
+                            .when(self.view == CalendarView::Week, |toolbar| {
+                                toolbar.child(toolbar_button(
+                                    "weekends",
+                                    if self.show_weekends {
+                                        "Hide weekends"
+                                    } else {
+                                        "Show weekends"
+                                    },
+                                    Command::ToggleWeekends,
+                                    cx,
+                                ))
+                            })
+                            .child(
+                                toolbar_button("settings", "⚙", Command::Settings, cx)
+                                    .w(px(36.0))
+                                    .px_0()
+                                    .text_size(px(20.0))
+                                    .tooltip(|_, cx| {
+                                        cx.new(|_| ItemTooltip {
+                                            title: "Settings".into(),
+                                            times: String::new(),
+                                            description: String::new(),
+                                        })
+                                        .into()
+                                    }),
+                            ),
+                    ),
             )
-            .child(
-                self.button("previous", "‹", Command::Previous, cx)
-                    .tooltip(|_, cx| {
-                        cx.new(|_| ItemTooltip {
-                            title: "Previous period".into(),
-                            times: String::new(),
-                            description: String::new(),
-                        })
-                        .into()
-                    }),
-            )
-            .child(
-                self.button("next", "›", Command::Next, cx)
-                    .tooltip(|_, cx| {
-                        cx.new(|_| ItemTooltip {
-                            title: "Next period".into(),
-                            times: String::new(),
-                            description: String::new(),
-                        })
-                        .into()
-                    }),
-            )
-            .child(div().flex_1().px_3().text_size(px(20.0)).child(title))
-            .child(
-                self.button(
-                    "week",
-                    if self.view == CalendarView::Week {
-                        "● Week"
-                    } else {
-                        "Week"
-                    },
-                    Command::View(CalendarView::Week),
-                    cx,
-                )
-                .when(self.view == CalendarView::Week, |button| {
-                    button.bg(rgb(0x3d3055)).border_color(rgb(0x55416f))
-                }),
-            )
-            .child(
-                self.button(
-                    "month",
-                    if self.view == CalendarView::Month {
-                        "● Month"
-                    } else {
-                        "Month"
-                    },
-                    Command::View(CalendarView::Month),
-                    cx,
-                )
-                .when(self.view == CalendarView::Month, |button| {
-                    button.bg(rgb(0x3d3055)).border_color(rgb(0x55416f))
-                }),
-            )
-            .child(self.button("settings", "Settings", Command::Settings, cx))
             .into_any_element()
+    }
+}
+
+fn upcoming_items(calendar: &Calendar, now: chrono::DateTime<Utc>) -> Vec<&CalendarItem> {
+    let mut items: Vec<_> = calendar
+        .items()
+        .iter()
+        .filter(|item| item.start() >= now)
+        .collect();
+    items.sort_by_key(|item| (item.start(), item.id()));
+    items.truncate(3);
+    items
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn upcoming_list_only_keeps_the_three_next_entries_in_time_order() {
+        let mut calendar = Calendar::default();
+        let now = resolve_local(
+            "2026-10-12 09:00",
+            chrono_tz::Europe::Paris,
+            Occurrence::Reject,
+        )
+        .unwrap();
+        for minutes in [180, -120, 60, 120, 240, 0] {
+            let start = now + Duration::minutes(minutes);
+            calendar
+                .create(ItemDraft {
+                    title: minutes.to_string(),
+                    description: String::new(),
+                    kind: ItemKind::Event,
+                    start,
+                    end: start + Duration::hours(1),
+                    timezone: chrono_tz::Europe::Paris,
+                    url: String::new(),
+                    completed: false,
+                })
+                .unwrap();
+        }
+        let titles: Vec<_> = upcoming_items(&calendar, now)
+            .into_iter()
+            .map(CalendarItem::title)
+            .collect();
+        assert_eq!(titles, ["0", "60", "120"]);
+        assert!(upcoming_items(&calendar, now + Duration::days(1)).is_empty());
     }
 }

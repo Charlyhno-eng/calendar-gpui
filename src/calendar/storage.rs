@@ -6,6 +6,9 @@ use std::{
 
 use super::{Calendar, CalendarError, Result};
 
+// Atomic saves include a disk sync, which can exceed half a second under load.
+const LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Single-writer, atomic local storage. Keep this handle alive while using the document.
 pub struct CalendarStore {
     path: PathBuf,
@@ -13,8 +16,28 @@ pub struct CalendarStore {
 }
 
 impl CalendarStore {
+    /// Load a fresh snapshot and release the lock immediately.
+    pub fn load(path: impl AsRef<Path>) -> Result<Calendar> {
+        Self::open_wait(path.as_ref(), true).map(|(_, calendar)| calendar)
+    }
+
+    /// Read, change and save under one lock. Never write a stale snapshot.
+    pub fn transact<T>(
+        path: impl AsRef<Path>,
+        change: impl FnOnce(&mut Calendar) -> Result<T>,
+    ) -> Result<(Calendar, T)> {
+        let (store, mut calendar) = Self::open_wait(path.as_ref(), true)?;
+        let value = change(&mut calendar)?;
+        store.save(&calendar)?;
+        Ok((calendar, value))
+    }
+
     pub fn open(path: impl AsRef<Path>) -> Result<(Self, Calendar)> {
-        let path = path.as_ref().to_owned();
+        Self::open_wait(path.as_ref(), false)
+    }
+
+    fn open_wait(path: &Path, wait: bool) -> Result<(Self, Calendar)> {
+        let path = path.to_owned();
         let parent = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -28,11 +51,22 @@ impl CalendarStore {
             .write(true)
             .open(path.with_extension("lock"))
             .map_err(|error| CalendarError(format!("Cannot open calendar lock: {error}")))?;
-        lock.try_lock().map_err(|error| {
-            CalendarError(format!(
-                "Cannot lock the calendar (another instance may be running): {error}"
-            ))
-        })?;
+        let deadline = std::time::Instant::now() + LOCK_TIMEOUT;
+        loop {
+            match lock.try_lock() {
+                Ok(()) => break,
+                Err(std::fs::TryLockError::WouldBlock)
+                    if wait && std::time::Instant::now() < deadline =>
+                {
+                    std::thread::sleep(std::time::Duration::from_millis(10));
+                }
+                Err(error) => {
+                    return Err(CalendarError(format!(
+                        "Cannot lock the calendar; retry the operation: {error}"
+                    )));
+                }
+            }
+        }
         let calendar = match fs::read(&path) {
             Ok(bytes) => {
                 let calendar: Calendar = serde_json::from_slice(&bytes).map_err(|error| {

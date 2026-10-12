@@ -727,6 +727,7 @@ dependencies = [
  "chrono",
  "chrono-tz",
  "gpui",
+ "iana-time-zone",
  "serde",
  "serde_json",
  "tempfile",

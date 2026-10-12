@@ -1,18 +1,21 @@
-![Calendar interface](assets/calendar-gpui-demo.png)
+![Calendar interface](assets/calendar-gpui-demo2.png)
 
 # Calendar GPUI
 
-Calendar GPUI helps individuals organize their schedules in a local desktop app.
-It opens to a week timeline and daily agenda for planning upcoming commitments.
-A six-row month view makes it easy to scan dates across a full calendar period.
-The compact dark interface pairs a mini-calendar sidebar with a spacious timeline,
-smaller text, violet date highlights, and a subtly transparent window background.
-Desktop transparency requires support from the window manager or compositor.
-Create timed events and tasks, then edit or remove them as plans change.
-Add notes and meeting links, and track task completion in the same calendar.
-Review weekends, the current time, and French national holidays at a glance.
-Choose an IANA display time zone while each item's original zone is retained.
-Calendar data stays in a validated local JSON file, available without a cloud account.
+---
+
+Calendar GPUI is a desktop calendar for people who plan their days locally.
+It opens to a week view at 07:00 for arranging appointments and commitments.
+Scroll with the mouse or trackpad to reach any hour of the full 24-hour day.
+The week shows Monday through Friday by default; use Show weekends to include Saturday and Sunday.
+A month view helps you review dates over a longer period.
+Create calendar entries, then adjust or delete them as your plans change.
+Keep notes and meeting links alongside each calendar entry.
+Press Enter in the entry editor to save. The sidebar shows the next three upcoming entries.
+Weekends and French national holidays provide context for planning.
+Start and end share one row; the desktop uses your computer's time zone automatically.
+Your calendar stays on your computer and needs no cloud account.
+Other applications and AI agents can manage events through a local MCP server.
 
 ---
 
@@ -20,15 +23,24 @@ Calendar data stays in a validated local JSON file, available without a cloud ac
 
 ### Install
 
-Install stable Rust with [rustup](https://rustup.rs/). On Linux, install the native
-GPUI development dependencies for X11/XCB, Wayland, xkbcommon, Vulkan, fontconfig,
-and OpenSSL, plus a C/C++ compiler, CMake, and pkg-config. On macOS, install Xcode
-and its command-line tools. Run the app in a graphical desktop session.
+Install stable Rust. Desktop builds need GPUI's native libraries: on Linux,
+X11/XCB, Wayland, xkbcommon, Vulkan, fontconfig, OpenSSL, and C/C++ build tools;
+on macOS, Xcode and its command-line tools.
+
+```bash
+cargo build --locked --bin calendar-gpui
+cargo build --locked --no-default-features --bin calendar-mcp
+```
 
 ### Run
 
-From the project directory, launch the desktop app with:
+Launch the desktop app in a graphical session:
 
 ```bash
-cargo run --locked
+cargo run --locked --bin calendar-gpui
 ```
+
+MCP clients launch `target/debug/calendar-mcp` over stdio.
+See the [Python](MCP-docs/python.md) and [TypeScript](MCP-docs/typescript.md) examples.
+Both use the same default calendar file as the app;
+set `CALENDAR_GPUI_DATA_FILE` to choose another file.

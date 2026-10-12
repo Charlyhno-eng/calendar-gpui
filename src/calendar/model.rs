@@ -14,7 +14,7 @@ pub enum ItemKind {
 }
 
 /// A draft is validated before it can become a saved item.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ItemDraft {
     pub title: String,
     pub description: String,
@@ -57,7 +57,10 @@ struct ItemValidation<'a> {
 impl ItemValidation<'_> {
     fn validate(&self) -> Result<()> {
         let title = self.title.trim();
-        if title.is_empty() || title.chars().count() > 200 || title.chars().any(char::is_control) {
+        if title.is_empty()
+            || title.chars().count() > 200
+            || self.title.chars().any(char::is_control)
+        {
             return Err(CalendarError(
                 "Title must contain 1–200 characters without line breaks.".into(),
             ));
@@ -97,7 +100,8 @@ impl ItemValidation<'_> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CalendarItem {
     id: u64,
     title: String,
@@ -168,7 +172,7 @@ impl CalendarItem {
 }
 
 /// Versioned document. Times are stored as UTC instants; the original zone is retained.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Calendar {
     version: u32,
