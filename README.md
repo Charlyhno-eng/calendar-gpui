@@ -2,8 +2,6 @@
 
 # Calendar GPUI
 
----
-
 Calendar GPUI is a desktop calendar for people who plan their days locally.
 It opens to a week view at 07:00 for arranging appointments and commitments.
 Scroll with the mouse or trackpad to reach any hour of the full 24-hour day.
@@ -16,8 +14,6 @@ Weekends and French national holidays provide context for planning.
 Start and end share one row; the desktop uses your computer's time zone automatically.
 Your calendar stays on your computer and needs no cloud account.
 Other applications and AI agents can manage events through a local MCP server.
-
----
 
 ## Quickstart
 
